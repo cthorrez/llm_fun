@@ -1,1 +1,5 @@
 ell-ai[all]
+datasets
+polars
+jax
+joblib
