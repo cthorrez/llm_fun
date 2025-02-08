@@ -40,21 +40,19 @@ class CachedOpenAIProvider(OpenAIProvider):
             def retrieve_from_cache(*args, **kwargs):
                 raw_response = self.cache[cache_key]
                 # Validate using the correct Pydantic model
-                # return ChatCompletion.model_validate_json(raw_response)
                 response = json.loads(raw_response)
-                response['id'] = 'FUCK'
-                return ParsedChatCompletion.model_validate(response)
+                response['id'] = '' # workaround, gemini doesn't add an id
+                return ParsedChatCompletion[FourChoiceAnswer].model_validate(response)
             return retrieve_from_cache
             
         original_call_function = super().provider_call_function(client, api_call_params)
         
-        def cached_call_function(*args, **kwargs):
+        def call_function_and_store_to_cache(*args, **kwargs):
             response = original_call_function(*args, **kwargs)
-            # Store the raw JSON response
             self.cache[cache_key] = response.model_dump_json()
             return response
             
-        return cached_call_function
+        return call_function_and_store_to_cache
 
     def _generate_cache_key(self, api_call_params: Optional[Dict[str, Any]]) -> str:
         """Generate consistent cache keys using serialized parameters"""
