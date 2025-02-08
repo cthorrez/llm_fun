@@ -172,3 +172,4 @@ cython_debug/
 
 # cached LLM responses
 .llm_cache
+data/*
