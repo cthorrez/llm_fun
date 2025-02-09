@@ -34,22 +34,32 @@ class CachedOpenAIProvider(OpenAIProvider):
         self.cache = Cache(cache_directory)
 
     def provider_call_function(self, client: OpenAI, api_call_params: Optional[Dict[str, Any]] = None) -> Callable[..., Any]:
+        is_structured = 'response_format' in api_call_params
+        force_retry = api_call_params['force_retry']
+        del api_call_params['force_retry']
+        if not is_structured:
+            api_call_params['stream'] = False
         cache_key = self._generate_cache_key(api_call_params)
         
-        if cache_key in self.cache:
+        if (cache_key in self.cache) and (not force_retry):
             def retrieve_from_cache(*args, **kwargs):
                 raw_response = self.cache[cache_key]
-                # Validate using the correct Pydantic model
-                response = json.loads(raw_response)
-                response['id'] = '' # workaround, gemini doesn't add an id
-                return ParsedChatCompletion[FourChoiceAnswer].model_validate(response)
+                return_val = raw_response
+                if is_structured:           
+                    response = json.loads(raw_response)
+                    response['id'] = '' # workaround, gemini doesn't add an id
+                    return_val = ParsedChatCompletion[FourChoiceAnswer].model_validate(response)
+                return return_val
             return retrieve_from_cache
             
         original_call_function = super().provider_call_function(client, api_call_params)
         
         def call_function_and_store_to_cache(*args, **kwargs):
             response = original_call_function(*args, **kwargs)
-            self.cache[cache_key] = response.model_dump_json()
+            cache_val = response
+            if is_structured:
+                cache_val = response.model_dump_json()
+            self.cache[cache_key] = cache_val
             return response
             
         return call_function_and_store_to_cache
