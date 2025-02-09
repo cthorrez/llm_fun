@@ -6,14 +6,14 @@ import openai
 import ell
 from cache_utils import CachedOpenAIProvider
 
-def register_clients():
+def register_clients(timeout=10.0):
 
     gemini_client = openai.Client(
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         api_key=os.environ["GOOGLE_API_KEY"],
     )
 
-    provider = CachedOpenAIProvider('.llm_cache')
+    provider = CachedOpenAIProvider('.llm_cache', timeout=timeout)
 
     ell.config.register_provider(provider, openai.Client)
     # model = "gemini-1.5-flash"

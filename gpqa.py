@@ -16,7 +16,7 @@ LETTERS = ['A', 'B', 'C', 'D']
 
 def main():
 
-    register_clients()
+    register_clients(timeout=10.0)
     model = "gemini-2.0-flash-lite-preview-02-05"
 
     @ell.complex(model, response_format=FourChoiceAnswer, temperature=0.0, max_tokens=32)
@@ -38,7 +38,7 @@ def main():
             ]
         thoughts = cot()
 
-        @ell.complex(model, response_format=FourChoiceAnswer, temperature=0.0, max_tokens=32, force_retry=force_retry)
+        @ell.complex(model, response_format=FourChoiceAnswer, temperature=1.0, max_tokens=32, force_retry=force_retry)
         def final_answer() -> FourChoiceAnswer:
             ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
             return [
@@ -57,6 +57,7 @@ def main():
 def run_eval(func):
     df = pl.read_parquet('data/gpqa.parquet')
     print(len(df))
+    df  = df.slice(56,1)
     # df = df.with_row_index().filter(~pl.col('index').is_in({57, 185}))
     print(len(df))
 
@@ -67,8 +68,10 @@ def run_eval(func):
     results = []
     for idx, row in enumerate(df.to_dicts()):
         question = row['Question']
-        print(question)
+        print(f'{idx}: {question}')
         answers = [row['Correct Answer']] + [row[f'Incorrect Answer {idx}'] for idx in range(1,4)]
+        for ans in answers:
+            print(ans)
         ids = [deterministic_hash(ans) for ans in answers]
         idxs = np.argsort(ids)
         shuffled_answers = [answers[idx] for idx in idxs]
@@ -80,13 +83,12 @@ def run_eval(func):
                 resp = func(question, shuffled_answers, force_retry=attempt_num>0)
                 break
             except:
+                print(f'attempt {attempt_num} failed, retrying')
                 attempt_num += 1
 
 
         print(f'{idx}: {resp.parsed.answer}\n')
         results.append(float(resp.parsed.answer == correct_letter))
-        if idx > 180:
-            time.sleep(8.0)
 
     return results
         

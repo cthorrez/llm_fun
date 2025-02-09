@@ -1,3 +1,4 @@
+import time
 import json
 from typing import Literal, Optional, Dict, Any, Callable
 from openai import OpenAI
@@ -29,9 +30,11 @@ def serialize_pydantic(obj):
 class CachedOpenAIProvider(OpenAIProvider):
     dangerous_disable_validation = True
 
-    def __init__(self, cache_directory=".diskcache"):
+    def __init__(self, cache_directory=".diskcache", timeout=10.0):
         super().__init__()
         self.cache = Cache(cache_directory)
+        self.timeout = timeout
+        self.last_call_time = time.time() - timeout
 
     def provider_call_function(self, client: OpenAI, api_call_params: Optional[Dict[str, Any]] = None) -> Callable[..., Any]:
         is_structured = 'response_format' in api_call_params
@@ -55,11 +58,18 @@ class CachedOpenAIProvider(OpenAIProvider):
         original_call_function = super().provider_call_function(client, api_call_params)
         
         def call_function_and_store_to_cache(*args, **kwargs):
+            wait_time = max((self.timeout - (time.time() - self.last_call_time)),0)
+            print(f'Waiting {wait_time:.4f} seconds before making next call')
+            time.sleep(wait_time)
             response = original_call_function(*args, **kwargs)
+            print(response)
+            self.last_call_time = time.time()
             cache_val = response
             if is_structured:
                 cache_val = response.model_dump_json()
-            self.cache[cache_key] = cache_val
+            # don't cache content filtered requests
+            if response.choices[0].finish_reason != 'content_filter':
+                self.cache[cache_key] = cache_val
             return response
             
         return call_function_and_store_to_cache
