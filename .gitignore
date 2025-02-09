@@ -171,5 +171,5 @@ cython_debug/
 .pypirc
 
 # cached LLM responses
-.llm_cache
+.llm_cache*
 data/*

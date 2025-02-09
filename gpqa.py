@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import polars as pl
+from types import SimpleNamespace
 from typing import Literal
 from pydantic import BaseModel, Field
 import ell
@@ -16,21 +17,41 @@ LETTERS = ['A', 'B', 'C', 'D']
 
 def main():
 
-    register_clients(timeout=10.0)
-    model = "gemini-2.0-flash-lite-preview-02-05"
+    register_clients(timeout=5.0)
+    models = [
+        "gemini-2.0-flash-lite-preview-02-05",
+        "mistral-small-latest",
+        "open-mistral-nemo",
+        "mistral-large-latest",
+    ][3:]
 
-    @ell.complex(model, response_format=FourChoiceAnswer, temperature=0.0, max_tokens=32)
-    def zero_shot(question, answers, force_retry=False) -> FourChoiceAnswer:
-        ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
-        return [
-            ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
-            ell.assistant("The correct answer is ")
-        ]
+    prompts = [
+        'zero_shot',
+        # 'zero_shot_cot',
+    ]
+
+    for model in models:
+        lmps = build_lmps(model)
+        for prompt in prompts:
+            print(f'Running eval with {model}, {prompt}')
+            results = run_eval(lmps[prompt])
+            print(f'Accuracy: {np.mean(results)}')
+
+def build_lmps(model):
+    
+    def zero_shot(question, answers, force_retry=False):
+        @ell.complex(model, max_tokens=32, response_format=FourChoiceAnswer, force_retry=force_retry)
+        def zero_shot_lmp() -> FourChoiceAnswer:
+            ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
+            return [
+                ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
+                ell.user("The correct answer is ")
+            ]
+        return zero_shot_lmp()
     
     def zero_shot_cot(question, answers, force_retry=False):
         ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
-
-        @ell.simple(model, temperature=0.0, max_tokens=512, force_retry=force_retry)
+        @ell.simple(model, max_tokens=512, force_retry=force_retry)
         def cot():
             return [
                 ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
@@ -38,31 +59,27 @@ def main():
             ]
         thoughts = cot()
 
-        @ell.complex(model, response_format=FourChoiceAnswer, temperature=1.0, max_tokens=32, force_retry=force_retry)
+        @ell.complex(model, response_format=FourChoiceAnswer, max_tokens=32, force_retry=force_retry)
         def final_answer() -> FourChoiceAnswer:
-            ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
             return [
                 ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
-                ell.assistant(f"Let’s think step by step:\n{thoughts}\nThe correct answer is ")
+                ell.assistant(f"Let’s think step by step:\n{thoughts}"),
+                ell.user("The correct answer is ")
             ]
         return final_answer()
     
-    # zs_results = run_eval(zero_shot)
-    # print(f'Zero shot: {np.mean(zs_results)}')
-
-    zs_cot_results = run_eval(zero_shot_cot)
-    print(f'Zero shot CoT 512: {np.mean(zs_cot_results)}')
-
+    return {
+        'zero_shot' : zero_shot,
+        'zero_shot_cot': zero_shot_cot,
+    }
     
-def run_eval(func):
+def run_eval(func, n=int(1e9)):
     df = pl.read_parquet('data/gpqa.parquet')
-    print(len(df))
-    df  = df.slice(56,1)
+    # df  = df.slice(57,1)
     # df = df.with_row_index().filter(~pl.col('index').is_in({57, 185}))
-    print(len(df))
 
     # print(df.slice(181,5)['Question'])
-    df = df.head(200)
+    df = df.head(n)
     max_retries = 3
 
     results = []
@@ -70,8 +87,6 @@ def run_eval(func):
         question = row['Question']
         print(f'{idx}: {question}')
         answers = [row['Correct Answer']] + [row[f'Incorrect Answer {idx}'] for idx in range(1,4)]
-        for ans in answers:
-            print(ans)
         ids = [deterministic_hash(ans) for ans in answers]
         idxs = np.argsort(ids)
         shuffled_answers = [answers[idx] for idx in idxs]
@@ -82,10 +97,16 @@ def run_eval(func):
             try:
                 resp = func(question, shuffled_answers, force_retry=attempt_num>0)
                 break
-            except:
-                print(f'attempt {attempt_num} failed, retrying')
+            except Exception as e:
+                print(e)
+                if attempt_num + 1 < max_retries:
+                    print(f'attempt {attempt_num} failed, retrying')
                 attempt_num += 1
-
+                resp = None
+        
+        if resp is None:
+            print(f'failed {max_retries} times, guessing A')
+            resp = SimpleNamespace(parsed=SimpleNamespace(answer='A'))
 
         print(f'{idx}: {resp.parsed.answer}\n')
         results.append(float(resp.parsed.answer == correct_letter))

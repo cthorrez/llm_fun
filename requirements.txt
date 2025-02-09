@@ -1,4 +1,6 @@
 ell-ai[all]
+google-genai
+mistralai
 datasets
 polars
 jax

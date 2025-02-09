@@ -2,7 +2,8 @@ import time
 import json
 from typing import Literal, Optional, Dict, Any, Callable
 from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
+from google import genai
+from google.genai import types
 from openai.types.chat.parsed_chat_completion import ParsedChatCompletion
 from ell.providers.openai import OpenAIProvider
 from pydantic import BaseModel
@@ -37,9 +38,11 @@ class CachedOpenAIProvider(OpenAIProvider):
         self.last_call_time = time.time() - timeout
 
     def provider_call_function(self, client: OpenAI, api_call_params: Optional[Dict[str, Any]] = None) -> Callable[..., Any]:
+        force_retry = api_call_params.get('force_retry')
+        if force_retry is not None:
+            del api_call_params['force_retry']
+        assert 'force_retry' not in api_call_params, "?????"
         is_structured = 'response_format' in api_call_params
-        force_retry = api_call_params['force_retry']
-        del api_call_params['force_retry']
         if not is_structured:
             api_call_params['stream'] = False
         cache_key = self._generate_cache_key(api_call_params)
@@ -59,10 +62,17 @@ class CachedOpenAIProvider(OpenAIProvider):
         
         def call_function_and_store_to_cache(*args, **kwargs):
             wait_time = max((self.timeout - (time.time() - self.last_call_time)),0)
-            print(f'Waiting {wait_time:.4f} seconds before making next call')
+            if wait_time > 0:
+                print(f'Waiting {wait_time:.4f} seconds before making next call')
             time.sleep(wait_time)
+            if 'stream_options' in kwargs:
+                del kwargs['stream_options']
+            
+            # workaround for mistral
+            if kwargs['messages'][-1]['role'] == 'assistant':
+                kwargs['messages'][-1]['prefix'] = True
+
             response = original_call_function(*args, **kwargs)
-            print(response)
             self.last_call_time = time.time()
             cache_val = response
             if is_structured:
