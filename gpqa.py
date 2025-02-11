@@ -1,14 +1,13 @@
 import time
+from tqdm import tqdm
 import numpy as np
 import polars as pl
 from types import SimpleNamespace
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import ell
 from clients import register_clients 
 from utils import deterministic_hash
-from google import genai
-from google.genai import types
 
 class FourChoiceAnswer(BaseModel):
     answer: Literal['A', 'B', 'C', 'D']
@@ -20,21 +19,22 @@ def main():
     register_clients(timeout=5.0)
     models = [
         "gemini-2.0-flash-lite-preview-02-05",
-        "mistral-small-latest",
-        "open-mistral-nemo",
-        "mistral-large-latest",
-    ][3:]
+        # "mistral-small-latest",
+        # "open-mistral-nemo",
+        # "mistral-large-latest",
+        "llama-3.3-70b-instruct",
+    ]
 
     prompts = [
         'zero_shot',
-        # 'zero_shot_cot',
+        'zero_shot_cot',
     ]
 
     for model in models:
         lmps = build_lmps(model)
         for prompt in prompts:
             print(f'Running eval with {model}, {prompt}')
-            results = run_eval(lmps[prompt])
+            results = run_eval(lmps[prompt], n=200)
             print(f'Accuracy: {np.mean(results)}')
 
 def build_lmps(model):
@@ -83,9 +83,9 @@ def run_eval(func, n=int(1e9)):
     max_retries = 3
 
     results = []
-    for idx, row in enumerate(df.to_dicts()):
+    for idx, row in enumerate(tqdm(df.to_dicts())):
         question = row['Question']
-        print(f'{idx}: {question}')
+        # print(f'{idx}: {question}')
         answers = [row['Correct Answer']] + [row[f'Incorrect Answer {idx}'] for idx in range(1,4)]
         ids = [deterministic_hash(ans) for ans in answers]
         idxs = np.argsort(ids)
@@ -108,7 +108,7 @@ def run_eval(func, n=int(1e9)):
             print(f'failed {max_retries} times, guessing A')
             resp = SimpleNamespace(parsed=SimpleNamespace(answer='A'))
 
-        print(f'{idx}: {resp.parsed.answer}\n')
+        # print(f'{idx}: {resp.parsed.answer}\n')
         results.append(float(resp.parsed.answer == correct_letter))
 
     return results

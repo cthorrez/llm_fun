@@ -1,10 +1,18 @@
 import os
+from enum import Enum
 import json
 from typing import Literal
 import ell
 from openai import OpenAI
 from gpqa import FourChoiceAnswer
 from pydantic import BaseModel
+
+
+class Choice(str, Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
 
 def main():
 
@@ -25,11 +33,11 @@ def main():
         {'role': 'user', 'content': [{'type': 'text', 'text': 'hello'}]},
         {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello, my name is '}], 'prefix': True},
     ]
-    response = client.chat.completions.create(
+    response = client.beta.chat.completions.parse(
     # response = client.beta.chat.completions.parse(
         model="llama-3.3-70b-instruct",
         messages=messages,
-        # response_format=NameResponse,
+        response_format=FourChoiceAnswer,
         max_tokens=2048
     )
 

@@ -1,10 +1,18 @@
 import os
 from typing import Literal
+from enum import Enum
 import ell
 from mistralai import Mistral
 from clients import register_clients
 from gpqa import FourChoiceAnswer
 from pydantic import BaseModel
+
+
+class Choice(str, Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
 
 def main():
     register_clients()
@@ -30,7 +38,7 @@ def bug():
     response = client.chat.parse(
         model="mistral-small-latest",
         messages=messages,
-        response_format=NameResponse,
+        response_format=Choice,
         max_tokens=32
     )
 
