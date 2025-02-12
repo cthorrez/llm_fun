@@ -19,9 +19,8 @@ def main():
     register_clients(timeout=5.0)
     models = [
         "gemini-2.0-flash-lite-preview-02-05",
-        # "mistral-small-latest",
-        # "open-mistral-nemo",
-        # "mistral-large-latest",
+        "mistral-small-latest",
+        "open-mistral-nemo",
         "llama-3.3-70b-instruct",
     ]
 
