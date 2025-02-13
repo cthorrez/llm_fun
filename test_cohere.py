@@ -1,10 +1,12 @@
 import os
+import json
 from enum import Enum
 import json
 from typing import Literal
 import ell
 from openai import OpenAI
 from gpqa import FourChoiceAnswer
+from clients import CohereClient
 from pydantic import BaseModel
 
 
@@ -24,7 +26,7 @@ def main():
         favorite_movie: str
         python_implementation_of_elo: str
 
-    client = OpenAI(
+    client = CohereClient(
         base_url = "https://api.cohere.com/v2",
         api_key = os.environ["COHERE_API_KEY"]
     )
@@ -39,24 +41,14 @@ def main():
         messages=messages,
         response_format={ 
             "type": "json_object",
-            "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "type": "object",
-                "properties": {
-                    "value": {
-                    "type": "string",
-                    "enum": ["A", "B", "C", "D"]
-                    }
-                },
-                "required": ["value"],
-                "additionalProperties": False
-            }
+            "schema": FourChoiceAnswer.model_json_schema(),
         },
         max_tokens=32,
         stream=False,
     )
 
     print(response)
+    
 
     # print(response.choices[0].message.content)
 

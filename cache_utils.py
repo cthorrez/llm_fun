@@ -54,7 +54,7 @@ class CachedOpenAIProvider(OpenAIProvider):
                 if is_structured:           
                     response = json.loads(raw_response)
                     response['id'] = '' # workaround, gemini doesn't add an id
-                    return_val = ParsedChatCompletion[FourChoiceAnswer].model_validate(response)
+                    return_val = ParsedChatCompletion[api_call_params['response_format']].model_validate(response)
                 return return_val
             return retrieve_from_cache
             

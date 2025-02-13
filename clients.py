@@ -3,9 +3,19 @@ import ell.stores
 import ell.stores.sql
 from ell.configurator import config
 import openai
+from openai import OpenAI
+from openai.resources.chat import Chat
+from openai.resources.chat.completions import Completions
 from mistralai import Mistral
 import ell
 from cache_utils import CachedOpenAIProvider
+
+class CohereClient(OpenAI):
+    """lol cohere wanted to be all special and use a different url"""
+    def post(self, path, *args, **kwargs):
+        path = path.replace("/chat/completions", "/chat")
+        return super().post(path, *args, **kwargs)
+
 
 def register_clients(timeout=10.0):
     provider = CachedOpenAIProvider('.llm_cache', timeout=timeout)
