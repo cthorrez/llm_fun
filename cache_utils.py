@@ -4,10 +4,12 @@ from typing import Literal, Optional, Dict, Any, Callable
 from openai import OpenAI
 from google import genai
 from google.genai import types
-from openai.types.chat.parsed_chat_completion import ParsedChatCompletion
+from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.parsed_chat_completion import ParsedChatCompletion, ParsedChatCompletionMessage, ParsedChoice
 from ell.providers.openai import OpenAIProvider
 from pydantic import BaseModel
 from diskcache import Cache
+from clients import CohereClient
 
 
 class FourChoiceAnswer(BaseModel):
@@ -43,6 +45,15 @@ class CachedOpenAIProvider(OpenAIProvider):
             del api_call_params['force_retry']
         assert 'force_retry' not in api_call_params, "?????"
         is_structured = 'response_format' in api_call_params
+
+        parse_class = api_call_params['response_format']
+
+        if isinstance(client, CohereClient) and is_structured:
+            api_call_params['response_format'] = { 
+                "type": "json_object",
+                "schema": api_call_params['response_format'].model_json_schema()
+            }
+            
         if not is_structured:
             api_call_params['stream'] = False
         cache_key = self._generate_cache_key(api_call_params)
@@ -51,10 +62,15 @@ class CachedOpenAIProvider(OpenAIProvider):
             def retrieve_from_cache(*args, **kwargs):
                 raw_response = self.cache[cache_key]
                 return_val = raw_response
-                if is_structured:           
+                if is_structured:
                     response = json.loads(raw_response)
-                    response['id'] = '' # workaround, gemini doesn't add an id
-                    return_val = ParsedChatCompletion[api_call_params['response_format']].model_validate(response)
+                    if isinstance(client, CohereClient):
+                        cc = ChatCompletion.model_validate(response)
+                        return_val = client.construct_parsed_completion(cc, parse_class)
+
+                    else:
+                        response['id'] = '' # workaround, gemini doesn't add an id
+                        return_val = ParsedChatCompletion[parse_class].model_validate(response)
                 return return_val
             return retrieve_from_cache
             
@@ -77,9 +93,15 @@ class CachedOpenAIProvider(OpenAIProvider):
             cache_val = response
             if is_structured:
                 cache_val = response.model_dump_json()
-            # don't cache content filtered requests
+
+            # don't cache content filtered requests  
             if response.choices[0].finish_reason != 'content_filter':
                 self.cache[cache_key] = cache_val
+
+            if isinstance(client, CohereClient):
+                parsed = client.construct_parsed_completion(response, parse_class)
+                return parsed
+
             return response
             
         return call_function_and_store_to_cache

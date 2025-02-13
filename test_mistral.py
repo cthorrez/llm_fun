@@ -46,5 +46,5 @@ def bug():
 
 
 if __name__ == '__main__':
-    # main()
-    bug()
+    main()
+    # bug()

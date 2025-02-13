@@ -6,8 +6,10 @@ from typing import Literal
 import ell
 from openai import OpenAI
 from gpqa import FourChoiceAnswer
+from registration import register_clients
 from clients import CohereClient
 from pydantic import BaseModel
+
 
 
 class Choice(str, Enum):
@@ -55,7 +57,18 @@ def main():
     # data = json.loads(response.choices[0].message.content)
     # print(data)
 
+def test_ell():
+    register_clients()
+
+    @ell.complex("command-r-plus-08-2024", max_tokens=32, response_format=FourChoiceAnswer, force_retry=True)
+    def explain(topic):
+        """You are an expert in explaining technical topics"""
+        return f"please explain {topic}"
+    
+    print(explain("Which is most accurate: A: Elo\nB: Glicko\nC: Bradley-Terry\nD:Glicko 2"))
+
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    test_ell()

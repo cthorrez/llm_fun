@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Literal
 from pydantic import BaseModel
 import ell
-from clients import register_clients 
+from registration import register_clients 
 from utils import deterministic_hash
 
 class FourChoiceAnswer(BaseModel):
@@ -16,17 +16,18 @@ LETTERS = ['A', 'B', 'C', 'D']
 
 def main():
 
-    register_clients(timeout=5.0)
+    register_clients(timeout=30.0)
     models = [
-        # "gemini-2.0-flash-lite-preview-02-05",
-        # "mistral-small-latest",
-        # "open-mistral-nemo",
-        # "llama-3.3-70b-instruct",
+        "gemini-2.0-flash-lite-preview-02-05",
+        "mistral-small-latest",
+        "open-mistral-nemo",
+        "llama-3.3-70b-instruct",
+        "command-r-plus-08-2024"
     ]
 
     prompts = [
         'zero_shot',
-        'zero_shot_cot',
+        # 'zero_shot_cot',
     ]
 
     for model in models:
@@ -94,6 +95,7 @@ def run_eval(func, n=int(1e9)):
         attempt_num = 0
         while attempt_num < max_retries:
             try:
+                # resp = func(question, shuffled_answers, force_retry=True)
                 resp = func(question, shuffled_answers, force_retry=attempt_num>0)
                 break
             except Exception as e:
@@ -107,7 +109,7 @@ def run_eval(func, n=int(1e9)):
             print(f'failed {max_retries} times, guessing A')
             resp = SimpleNamespace(parsed=SimpleNamespace(answer='A'))
 
-        # print(f'{idx}: {resp.parsed.answer}\n')
+        # print(f'{idx}: {resp.parsed}\n')
         results.append(float(resp.parsed.answer == correct_letter))
 
     return results

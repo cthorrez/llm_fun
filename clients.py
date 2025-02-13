@@ -1,55 +1,67 @@
 import os
-import ell.stores
+import json
 import ell.stores.sql
 from ell.configurator import config
 import openai
 from openai import OpenAI
 from openai.resources.chat import Chat
 from openai.resources.chat.completions import Completions
+from openai.types.chat import ChatCompletionMessage, ChatCompletion
+from openai.types.chat.chat_completion import Choice
 from mistralai import Mistral
+from openai.types.chat.parsed_chat_completion import ParsedChatCompletion, ParsedChatCompletionMessage, ParsedChoice
 import ell
-from cache_utils import CachedOpenAIProvider
+
 
 class CohereClient(OpenAI):
     """lol cohere wanted to be all special and use a different url"""
     def post(self, path, *args, **kwargs):
         path = path.replace("/chat/completions", "/chat")
-        return super().post(path, *args, **kwargs)
 
+        if 'response_format' in kwargs:
+            kwargs['response_format']['type'] = 'json_object'
+            kwargs['response_format']['schema'] = kwargs['response_format']['json_schema']
+            del kwargs['response_format']['json_schema']
 
-def register_clients(timeout=10.0):
-    provider = CachedOpenAIProvider('.llm_cache', timeout=timeout)
-    ell.config.register_provider(provider, openai.Client)
+        response = super().post(path, *args, **kwargs)
 
-    gemini_client = openai.Client(
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        api_key=os.environ["GOOGLE_API_KEY"],
-    )
-    gemini_models = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-pro",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
-    ]
-    for gemini_model in gemini_models:
-        ell.config.register_model(gemini_model, gemini_client)
+        # Construct the message
+        message = ChatCompletionMessage(
+            role=response.message["role"],
+            content=response.message["content"][0]["text"],
+        )
+        finish_reason = None
+        if response.finish_reason == 'MAX_TOKENS':
+            finish_reason = 'length'
+        elif response.finish_reason == 'COMPLETE':
+            finish_reason = 'stop'
+        else:
+            print(response)
 
-    mistral_client = openai.Client(
-        base_url="https://api.mistral.ai/v1",
-        api_key=os.environ["MISTRAL_API_KEY"],
-    )
-    mistral_models = [
-        "mistral-small-latest",
-        "open-mistral-nemo"
-    ]
-    for mistral_model in mistral_models:
-        ell.config.register_model(mistral_model, mistral_client)
+        return ChatCompletion(
+            id=response.id,
+            choices=[Choice(finish_reason=finish_reason, message=message, index=0)],
+            created=0,
+            model=kwargs.get('model', ''),
+            object='chat.completion',
+        )
+    
+    @staticmethod
+    def construct_parsed_completion(response, parse_class):
+        data = json.loads(response.choices[0].message.content)
+        parsed = ParsedChatCompletion(
+            id=response.id,
+            choices=[ParsedChoice(
+                finish_reason=response.choices[0].finish_reason,
+                index=0,
+                message=ParsedChatCompletionMessage(
+                    role=response.choices[0].message.role,
+                    parsed=parse_class(**data)
+                )
+            )],
+            created=0,
+            model='',
+            object='chat.completion'
+        )
+        return parsed
 
-    llama_client = openai.Client(
-        base_url = "https://api.scaleway.ai/8b2c7bde-831d-4972-b96f-c03d47763941/v1",
-        api_key = os.environ["SCALEWAY_API_KEY"]
-    )
-    llama_models = ["llama-3.3-70b-instruct"]
-    for llama_model in llama_models:
-        ell.config.register_model(llama_model, llama_client)
