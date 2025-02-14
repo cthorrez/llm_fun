@@ -44,7 +44,7 @@ class CachedOpenAIProvider(OpenAIProvider):
         if force_retry is not None:
             del api_call_params['force_retry']
         assert 'force_retry' not in api_call_params, "?????"
-        is_structured = 'response_format' in api_call_params
+        is_structured = api_call_params.get('response_format')
 
         parse_class = api_call_params['response_format']
 
@@ -98,7 +98,7 @@ class CachedOpenAIProvider(OpenAIProvider):
             if response.choices[0].finish_reason != 'content_filter':
                 self.cache[cache_key] = cache_val
 
-            if isinstance(client, CohereClient):
+            if isinstance(client, CohereClient) and is_structured:
                 parsed = client.construct_parsed_completion(response, parse_class)
                 return parsed
 

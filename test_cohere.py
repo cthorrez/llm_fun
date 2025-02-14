@@ -41,10 +41,10 @@ def main():
     response = client.chat.completions.create(
         model="command-r-plus-08-2024",
         messages=messages,
-        response_format={ 
-            "type": "json_object",
-            "schema": FourChoiceAnswer.model_json_schema(),
-        },
+        # response_format={ 
+        #     "type": "json_object",
+        #     "schema": FourChoiceAnswer.model_json_schema(),
+        # },
         max_tokens=32,
         stream=False,
     )
@@ -60,7 +60,9 @@ def main():
 def test_ell():
     register_clients()
 
-    @ell.complex("command-r-plus-08-2024", max_tokens=32, response_format=FourChoiceAnswer, force_retry=True)
+    response_format = None
+    # response_format = FourChoiceAnswer
+    @ell.complex("command-r-plus-08-2024", max_tokens=32, response_format=response_format, force_retry=False)
     def explain(topic):
         """You are an expert in explaining technical topics"""
         return f"please explain {topic}"
