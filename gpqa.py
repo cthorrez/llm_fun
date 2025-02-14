@@ -16,7 +16,7 @@ LETTERS = ['A', 'B', 'C', 'D']
 
 def main():
 
-    register_clients(timeout=30.0)
+    register_clients(timeout=15.0)
     models = [
         "gemini-2.0-flash-lite-preview-02-05",
         "mistral-small-latest",
@@ -27,7 +27,7 @@ def main():
 
     prompts = [
         'zero_shot',
-        # 'zero_shot_cot',
+        'zero_shot_cot',
     ]
 
     for model in models:

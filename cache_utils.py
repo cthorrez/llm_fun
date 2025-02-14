@@ -46,7 +46,8 @@ class CachedOpenAIProvider(OpenAIProvider):
         assert 'force_retry' not in api_call_params, "?????"
         is_structured = api_call_params.get('response_format')
 
-        parse_class = api_call_params['response_format']
+        if is_structured:
+            parse_class = api_call_params['response_format']
 
         if isinstance(client, CohereClient) and is_structured:
             api_call_params['response_format'] = { 
@@ -61,6 +62,8 @@ class CachedOpenAIProvider(OpenAIProvider):
         if (cache_key in self.cache) and (not force_retry):
             def retrieve_from_cache(*args, **kwargs):
                 raw_response = self.cache[cache_key]
+                # print('got from cache:')
+                # print(raw_response)
                 return_val = raw_response
                 if is_structured:
                     response = json.loads(raw_response)
@@ -88,7 +91,10 @@ class CachedOpenAIProvider(OpenAIProvider):
             if kwargs['messages'][-1]['role'] == 'assistant':
                 kwargs['messages'][-1]['prefix'] = True
 
+            # print('getting from api')
             response = original_call_function(*args, **kwargs)
+            # print(response)
+            
             self.last_call_time = time.time()
             cache_val = response
             if is_structured:
