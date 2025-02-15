@@ -6,3 +6,4 @@ polars
 jax
 joblib
 tqdm
+matplotlib

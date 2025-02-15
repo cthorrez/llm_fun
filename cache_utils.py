@@ -91,9 +91,9 @@ class CachedOpenAIProvider(OpenAIProvider):
             if kwargs['messages'][-1]['role'] == 'assistant':
                 kwargs['messages'][-1]['prefix'] = True
 
-            # print('getting from api')
+            print('getting from api')
             response = original_call_function(*args, **kwargs)
-            # print(response)
+            print(response)
             
             self.last_call_time = time.time()
             cache_val = response

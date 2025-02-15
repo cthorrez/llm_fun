@@ -45,13 +45,13 @@ def register_clients(timeout=10.0):
     for mistral_model in mistral_models:
         ell.config.register_model(mistral_model, mistral_client)
 
-    llama_client = openai.Client(
+    scaleway_client = openai.Client(
         base_url = "https://api.scaleway.ai/8b2c7bde-831d-4972-b96f-c03d47763941/v1",
         api_key = os.environ["SCALEWAY_API_KEY"]
     )
-    llama_models = ["llama-3.3-70b-instruct"]
-    for llama_model in llama_models:
-        ell.config.register_model(llama_model, llama_client)
+    scaleway_models = ["llama-3.3-70b-instruct"]
+    for scaleway_model in scaleway_models:
+        ell.config.register_model(scaleway_model, scaleway_client)
 
 
     cohere_client = CohereClient(

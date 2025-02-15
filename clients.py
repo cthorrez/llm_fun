@@ -24,6 +24,7 @@ class CohereClient(OpenAI):
             del kwargs['response_format']['json_schema']
 
         response = super().post(path, *args, **kwargs)
+        print(response)
 
         # Construct the message
         message = ChatCompletionMessage(

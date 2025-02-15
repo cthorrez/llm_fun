@@ -1,8 +1,7 @@
-import time
 from tqdm import tqdm
 import numpy as np
 import polars as pl
-from types import SimpleNamespace
+import matplotlib.pyplot as plt
 from typing import Literal
 from pydantic import BaseModel
 import ell
@@ -15,7 +14,6 @@ class FourChoiceAnswer(BaseModel):
 LETTERS = ['A', 'B', 'C', 'D']
 
 def main():
-
     register_clients(timeout=15.0)
     models = [
         "gemini-2.0-flash-lite-preview-02-05",
@@ -30,17 +28,58 @@ def main():
         'zero_shot_cot',
     ]
 
+    all_results = []
+
     for model in models:
         lmps = build_lmps(model)
         for prompt in prompts:
             print(f'Running eval with {model}, {prompt}')
-            results = run_eval(lmps[prompt], n=200)
-            print(f'Accuracy: {np.mean(results)}')
+            results_df = run_eval(
+                lmps[prompt], 
+                model=model,
+                prompt=prompt,
+                n=200
+            )
+            all_results.append(results_df)
+
+    # Combine and pivot results
+    combined_df = pl.concat(all_results)
+    
+    # Create model-prompt column for pivoting
+    combined_df = combined_df.with_columns(
+        (pl.col("model") + "-" + pl.col("prompt")).alias("model_prompt")
+    )
+
+    # Pivot to wide format
+    pivot_df = combined_df.pivot(
+        values="result",
+        index=["question", "correct_letter"],
+        columns="model_prompt",
+        aggregate_function="first"
+    )
+
+    # Calculate solve rate across all model-prompt pairs
+    model_prompt_cols = [col for col in pivot_df.columns 
+                       if col not in ["question", "correct_letter"]]
+    
+    pivot_df = pivot_df.with_columns(
+        pl.mean_horizontal(model_prompt_cols).alias("solve_rate")
+    )
+
+    # Save and print results
+    pivot_df.write_csv("data/collated_results.csv")
+    print("\nFinal results dataframe:")
+    print(pivot_df.head())
+
+    plt.hist(pivot_df['solve_rate'], bins=11)
+    plt.show()
+    
+    return pivot_df
 
 def build_lmps(model):
     
-    def zero_shot(question, answers, force_retry=False):
-        @ell.complex(model, max_tokens=32, response_format=FourChoiceAnswer, force_retry=force_retry)
+    def zero_shot(question, answers, force_retry=False, **kwargs):
+        @ell.complex(model, max_tokens=32, response_format=FourChoiceAnswer, force_retry=force_retry, **kwargs)
         def zero_shot_lmp() -> FourChoiceAnswer:
             ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
             return [
@@ -49,9 +88,9 @@ def build_lmps(model):
             ]
         return zero_shot_lmp()
     
-    def zero_shot_cot(question, answers, force_retry=False):
+    def zero_shot_cot(question, answers, force_retry=False, **kwargs):
         ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
-        @ell.simple(model, max_tokens=512, force_retry=force_retry)
+        @ell.simple(model, max_tokens=512, force_retry=force_retry, **kwargs)
         def cot():
             return [
                 ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
@@ -59,7 +98,7 @@ def build_lmps(model):
             ]
         thoughts = cot()
 
-        @ell.complex(model, response_format=FourChoiceAnswer, max_tokens=32, force_retry=force_retry)
+        @ell.complex(model, response_format=FourChoiceAnswer, max_tokens=32, force_retry=force_retry, **kwargs)
         def final_answer() -> FourChoiceAnswer:
             return [
                 ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
@@ -73,46 +112,47 @@ def build_lmps(model):
         'zero_shot_cot': zero_shot_cot,
     }
     
-def run_eval(func, n=int(1e9)):
-    df = pl.read_parquet('data/gpqa.parquet')
-    # df  = df.slice(57,1)
-    # df = df.with_row_index().filter(~pl.col('index').is_in({57, 185}))
-
-    # print(df.slice(181,5)['Question'])
-    df = df.head(n)
+def run_eval(func, model: str, prompt: str, n: int = int(1e9)):
+    df = pl.read_parquet('data/gpqa.parquet').head(n)
     max_retries = 3
+    records = []
 
-    results = []
-    for idx, row in enumerate(tqdm(df.to_dicts())):
+    for row in tqdm(df.to_dicts()):
         question = row['Question']
-        # print(f'{idx}: {question}')
-        answers = [row['Correct Answer']] + [row[f'Incorrect Answer {idx}'] for idx in range(1,4)]
+        answers = [row['Correct Answer']] + [row[f'Incorrect Answer {idx}'] 
+                 for idx in range(1,4)]
+        
+        # Consistent answer shuffling
         ids = [deterministic_hash(ans) for ans in answers]
         idxs = np.argsort(ids)
         shuffled_answers = [answers[idx] for idx in idxs]
         correct_idx = shuffled_answers.index(row['Correct Answer'])
         correct_letter = LETTERS[correct_idx]
-        attempt_num = 0
-        while attempt_num < max_retries:
+
+        # Retry logic
+        result = None
+        for attempt in range(max_retries):
             try:
-                # resp = func(question, shuffled_answers, force_retry=True)
-                resp = func(question, shuffled_answers, force_retry=attempt_num>0)
+                if attempt == 0:
+                    resp = func(question, shuffled_answers)
+                else:
+                    resp = func(question, shuffled_answers, force_retry=True, max_tokens=64)
+                result = float(resp.parsed.answer == correct_letter)
                 break
             except Exception as e:
-                print(e)
-                if attempt_num + 1 < max_retries:
-                    print(f'attempt {attempt_num} failed, retrying')
-                attempt_num += 1
-                resp = None
-        
-        if resp is None:
-            print(f'failed {max_retries} times, guessing A')
-            resp = SimpleNamespace(parsed=SimpleNamespace(answer='A'))
+                if attempt == max_retries - 1:
+                    result = float(correct_letter == 'A')
+                    print(f"Failed after {max_retries} attempts for: {question[:50]}...\nGuessing A")
 
-        # print(f'{idx}: {resp.parsed}\n')
-        results.append(float(resp.parsed.answer == correct_letter))
+        records.append({
+            "question": question,
+            "correct_letter": correct_letter,
+            "result": result,
+            "model": model,
+            "prompt": prompt
+        })
 
-    return results
+    return pl.DataFrame(records)
         
     
 
