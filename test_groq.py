@@ -38,7 +38,7 @@ def main():
         # model="llama-3.3-70b-versatile",
         model="llama-3.3-70b-versatile",
         messages=messages,
-        response_format={ "type": "json_object" },
+        response_format={"type": "json_object", 'json_schema':NameResponse.model_json_schema()},
         max_tokens=2048
     )
 

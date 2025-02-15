@@ -14,13 +14,17 @@ class FourChoiceAnswer(BaseModel):
 LETTERS = ['A', 'B', 'C', 'D']
 
 def main():
-    register_clients(timeout=15.0)
+    register_clients(timeout=2.0)
     models = [
         "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-2.0-flash",
         "mistral-small-latest",
         "open-mistral-nemo",
         "llama-3.3-70b-instruct",
-        "command-r-plus-08-2024"
+        "command-r-plus-08-2024",
+        "deepseek-r1-distill-llama-70b",
+        "gpt-4o-2024-08-06",
+        "gpt-4o-mini-2024-07-18",
     ]
 
     prompts = [
@@ -54,7 +58,7 @@ def main():
     pivot_df = combined_df.pivot(
         values="result",
         index=["question", "correct_letter"],
-        columns="model_prompt",
+        on="model_prompt",
         aggregate_function="first"
     )
 
@@ -65,6 +69,9 @@ def main():
     pivot_df = pivot_df.with_columns(
         pl.mean_horizontal(model_prompt_cols).alias("solve_rate")
     )
+
+    for col in model_prompt_cols:
+        print(f'{col}: {pivot_df[col].to_numpy().mean():.4f} ')
 
     # Save and print results
     pivot_df.write_csv("data/collated_results.csv")

@@ -31,14 +31,18 @@ def main():
 
     messages = [
         {'role': 'user', 'content': [{'type': 'text', 'text': 'hello'}]},
-        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello, my name is '}], 'prefix': True},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello, I will now tell you my name. My name is'}], 'prefix':True},
+        # {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello, I will now tell you my name. My name is'}], 'prefix':True},
+        # {'role': 'assistant', 'content': [{'type': 'text', 'text': 'I will also tell you a joke '}], 'prefix':False},
+        # {'role': 'assistant', 'content': [{'type': 'text', 'text': 'I will also tell you a joke '}], 'prefix':True},
     ]
-    response = client.beta.chat.completions.parse(
     # response = client.beta.chat.completions.parse(
-        model="llama-3.3-70b-instruct",
+    response = client.chat.completions.create(
+        # model="llama-3.3-70b-instruct",
+        model="deepseek-r1-distill-llama-70b",
         messages=messages,
-        response_format=FourChoiceAnswer,
-        max_tokens=2048
+        # response_format=FourChoiceAnswer,
+        max_tokens=128
     )
 
     print(response.choices[0].message.content)

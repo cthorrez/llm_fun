@@ -49,7 +49,7 @@ def register_clients(timeout=10.0):
         base_url = "https://api.scaleway.ai/8b2c7bde-831d-4972-b96f-c03d47763941/v1",
         api_key = os.environ["SCALEWAY_API_KEY"]
     )
-    scaleway_models = ["llama-3.3-70b-instruct"]
+    scaleway_models = ["llama-3.3-70b-instruct", "deepseek-r1-distill-llama-70b"]
     for scaleway_model in scaleway_models:
         ell.config.register_model(scaleway_model, scaleway_client)
 
