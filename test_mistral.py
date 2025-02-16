@@ -3,7 +3,7 @@ from typing import Literal
 from enum import Enum
 import ell
 from mistralai import Mistral
-from clients import register_clients
+from registration import register_clients
 from gpqa import FourChoiceAnswer
 from pydantic import BaseModel
 
@@ -17,7 +17,7 @@ class Choice(str, Enum):
 def main():
     register_clients()
 
-    @ell.complex("mistral-small-latest", max_tokens=32, response_format=FourChoiceAnswer)
+    @ell.complex("open-mixtral-8x7b", max_tokens=64, response_format=FourChoiceAnswer, force_retry=True, stop=['\n'])
     def explain(topic):
         """You are an expert in explaining technical topics"""
         return f"please explain {topic}"
@@ -39,7 +39,8 @@ def bug():
         model="mistral-small-latest",
         messages=messages,
         response_format=Choice,
-        max_tokens=32
+        max_tokens=64,
+        stop=['\n']
     )
 
     print(response.choices[0].message.content)

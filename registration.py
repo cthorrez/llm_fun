@@ -30,6 +30,7 @@ def register_clients(timeout=10.0):
         "gemini-1.5-pro",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-2.0-pro-exp-02-05",
     ]
     for gemini_model in gemini_models:
         ell.config.register_model(gemini_model, gemini_client)
@@ -40,7 +41,9 @@ def register_clients(timeout=10.0):
     )
     mistral_models = [
         "mistral-small-latest",
-        "open-mistral-nemo"
+        "open-mistral-nemo",
+        "open-mixtral-8x7b",
+        "open-mixtral-8x22b",
     ]
     for mistral_model in mistral_models:
         ell.config.register_model(mistral_model, mistral_client)
@@ -49,7 +52,7 @@ def register_clients(timeout=10.0):
         base_url = "https://api.scaleway.ai/8b2c7bde-831d-4972-b96f-c03d47763941/v1",
         api_key = os.environ["SCALEWAY_API_KEY"]
     )
-    scaleway_models = ["llama-3.3-70b-instruct", "deepseek-r1-distill-llama-70b"]
+    scaleway_models = ["llama-3.3-70b-instruct", "deepseek-r1-distill-llama-70b", "deepseek-r1"]
     for scaleway_model in scaleway_models:
         ell.config.register_model(scaleway_model, scaleway_client)
 

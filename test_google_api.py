@@ -21,7 +21,7 @@ def main():
     ans = "(A) Quantum Electrodynamics\n(B) Quantum Chromodynamics\n(C) Classical Electrodynamics\n(D) Superstring Theory"
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite-preview-02-05",
+        model="gemini-2.0-pro-exp-02-05",
         contents=[
             {'role': 'user', 'parts': [{'text': f'What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\".'}]},
             {'role': 'model', 'parts': [{'text': 'Let’s think step by step...'}]},

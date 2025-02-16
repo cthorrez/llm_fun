@@ -54,6 +54,10 @@ class CachedOpenAIProvider(OpenAIProvider):
                 "type": "json_object",
                 "schema": api_call_params['response_format'].model_json_schema()
             }
+
+        if ('xtral' in api_call_params.get('model')):
+            if is_structured:
+                api_call_params['max_tokens'] = 256
             
         if not is_structured:
             api_call_params['stream'] = False
@@ -92,10 +96,9 @@ class CachedOpenAIProvider(OpenAIProvider):
                 kwargs['messages'][-1]['prefix'] = True
 
             print('getting from api')
+            self.last_call_time = time.time()
             response = original_call_function(*args, **kwargs)
             print(response)
-            
-            self.last_call_time = time.time()
             cache_val = response
             if is_structured:
                 cache_val = response.model_dump_json()

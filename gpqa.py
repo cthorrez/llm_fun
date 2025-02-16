@@ -1,3 +1,4 @@
+import time
 from tqdm import tqdm
 import numpy as np
 import polars as pl
@@ -12,18 +13,25 @@ class FourChoiceAnswer(BaseModel):
     answer: Literal['A', 'B', 'C', 'D']
 
 LETTERS = ['A', 'B', 'C', 'D']
+TIMEOUT = 2.5
+
 
 def main():
-    register_clients(timeout=2.0)
+    register_clients(timeout=TIMEOUT)
     models = [
         "gemini-2.0-flash-lite-preview-02-05",
         "gemini-2.0-flash",
+        # "gemini-2.0-pro-exp-02-05", # limit too small
         "mistral-small-latest",
+        "open-mixtral-8x7b",
+        "open-mixtral-8x22b",
         "open-mistral-nemo",
         "llama-3.3-70b-instruct",
         "command-r-plus-08-2024",
+        "deepseek-r1",
         "deepseek-r1-distill-llama-70b",
         "gpt-4o-2024-08-06",
+        "gpt-4o-2024-11-20"
         "gpt-4o-mini-2024-07-18",
     ]
 
@@ -86,7 +94,9 @@ def main():
 def build_lmps(model):
     
     def zero_shot(question, answers, force_retry=False, **kwargs):
-        @ell.complex(model, max_tokens=32, response_format=FourChoiceAnswer, force_retry=force_retry, **kwargs)
+        if 'max_tokens' not in kwargs:
+            kwargs['max_tokens'] = 32
+        @ell.complex(model, response_format=FourChoiceAnswer, force_retry=force_retry, **kwargs)
         def zero_shot_lmp() -> FourChoiceAnswer:
             ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
             return [
@@ -97,7 +107,9 @@ def build_lmps(model):
     
     def zero_shot_cot(question, answers, force_retry=False, **kwargs):
         ans = '\n'.join([f'({letter}) {answer}' for letter, answer in zip(LETTERS, answers)])
-        @ell.simple(model, max_tokens=512, force_retry=force_retry, **kwargs)
+
+        cot_kwargs = {k:v for k,v in kwargs.items() if k != 'max_tokens'}
+        @ell.simple(model, max_tokens=512, force_retry=force_retry, **cot_kwargs)
         def cot():
             return [
                 ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
@@ -105,7 +117,9 @@ def build_lmps(model):
             ]
         thoughts = cot()
 
-        @ell.complex(model, response_format=FourChoiceAnswer, max_tokens=32, force_retry=force_retry, **kwargs)
+        if 'max_tokens' not in kwargs:
+            kwargs['max_tokens'] = 32
+        @ell.complex(model, response_format=FourChoiceAnswer, force_retry=force_retry, **kwargs)
         def final_answer() -> FourChoiceAnswer:
             return [
                 ell.user(f"What is the correct answer to this question: {question}\nChoices:\n{ans}\nFormat your response as follows: \"The correct answer is (insert answer here)\"."),
@@ -143,10 +157,11 @@ def run_eval(func, model: str, prompt: str, n: int = int(1e9)):
                 if attempt == 0:
                     resp = func(question, shuffled_answers)
                 else:
-                    resp = func(question, shuffled_answers, force_retry=True, max_tokens=64)
+                    resp = func(question, shuffled_answers, force_retry=True)
                 result = float(resp.parsed.answer == correct_letter)
                 break
             except Exception as e:
+                print(e)
                 if attempt == max_retries - 1:
                     result = float(correct_letter == 'A')
                     print(f"Failed after {max_retries} attempts for: {question[:50]}...\nGuessing A")
