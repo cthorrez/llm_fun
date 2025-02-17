@@ -7,15 +7,15 @@ def load_and_preprocess():
     df = pl.read_csv('data/collated_results.csv')
     models = [c for c in df.columns if c not in {'question', 'correct_letter', 'solve_rate'}]
     model_to_idx = {model:idx for idx, model in enumerate(models)}
-    df = df.with_row_index(name='question_id').with_columns([
+    exploded_df = df.with_row_index(name='question_id').with_columns([
         pl.concat_list(models).alias('outcome'),
         pl.lit(list(range(len(models)))).cast(pl.List(pl.UInt32)).alias('model_id')
     ]).explode(['outcome', 'model_id'])
-    matches = df[['model_id', 'question_id',]].to_jax()
-    outcomes = df['outcome'].to_jax()
-    return matches, outcomes
+    matches = exploded_df[['model_id', 'question_id',]].to_jax()
+    outcomes = exploded_df['outcome'].to_jax()
+    return df, matches, outcomes
 
-
+@jax.jit
 def loss_fn(
     matches,
     outcomes,
@@ -26,11 +26,9 @@ def loss_fn(
     ):
     rating_diffs = model_ratings[matches[:,0]] - question_ratings[matches[:,1]]
     probs = jax.nn.sigmoid(rating_diffs)
-    jax.debug.print('probs {}', probs)
     ll = (jnp.log(probs) * outcomes).sum() + (jnp.log(1.0 - probs) * (1.0 - outcomes)).sum()
     reg = model_reg * jnp.linalg.norm(model_ratings) + question_reg * jnp.linalg.norm(question_ratings)
     loss = reg - ll
-    jax.debug.print('loss {}', loss)
     return loss
 
 loss_and_grad = jax.value_and_grad(
@@ -42,9 +40,11 @@ loss_and_grad = jax.value_and_grad(
 def bp_bt(matches, outcomes, n_models, n_questions, model_reg=1.0, question_reg=1.0):
     # initial_model_ratings = jnp.zeros(n_models)
     # initial_question_ratings = jnp.zeros(n_questions)
-    key = jax.random.PRNGKey(0)
-    initial_model_ratings = jax.random.normal(key=key, shape=(n_models,))
-    initial_question_ratings = jax.random.normal(key=key, shape=(n_questions,))
+    # key = jax.random.PRNGKey(0)
+    # initial_model_ratings = jax.random.normal(key=key, shape=(n_models,))
+    # initial_question_ratings = jax.random.normal(key=key, shape=(n_questions,))
+    initial_model_ratings = jnp.ones(n_models)
+    initial_question_ratings = jnp.ones(n_questions)
     initial_params = jnp.concatenate([initial_model_ratings, initial_question_ratings])
 
     def objective(params):
@@ -67,12 +67,18 @@ def bp_bt(matches, outcomes, n_models, n_questions, model_reg=1.0, question_reg=
     return model_ratings, question_ratings
 
 def main():
-    matches, outcomes = load_and_preprocess()
+    df, matches, outcomes = load_and_preprocess()
     n_models = int(jnp.max(matches[:, 0])) + 1
     n_questions = int(jnp.max(matches[:, 1])) + 1
     model_ratings, question_ratings = bp_bt(matches, outcomes, n_models, n_questions)
     print("Model Ratings:", model_ratings)
     print("Question Ratings:", question_ratings)
+    df = df.with_columns(pl.Series('question_rating', question_ratings.tolist())).sort('question_rating', descending=True)
+
+    for row in df.to_dicts()[:10]:
+        print(row['question_rating'], row['solve_rate'])
+        print(row['question'])
+        print('\n')
 
 if __name__ == '__main__':
     main()
